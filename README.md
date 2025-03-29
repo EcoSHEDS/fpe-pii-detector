@@ -87,13 +87,23 @@ python entrypoint.py detect-image-batch --filename-column image_path images.csv
 ### Detect PII in an FPE Imageset
 
 ```sh
-python entrypoint.py detect-fpe-imageset [--model-file MODEL_FILE] [--min-confidence MIN_CONFIDENCE] [--max-images MAX_IMAGES] [--s3-bucket S3_BUCKET] [--dry-run] [--debug] IMAGESET_ID
+python entrypoint.py detect-fpe-imageset [--model-file MODEL_FILE] [--min-confidence MIN_CONFIDENCE] [--max-images MAX_IMAGES] [--s3-bucket S3_BUCKET] [--dry-run] [--workers WORKERS] [--batch-size BATCH_SIZE] [--debug] IMAGESET_ID
 ```
+
+**Parallel Processing Options:**
+- `--workers`: Number of worker processes for parallel processing. Set to 0 or omit for sequential processing.
+- `--batch-size`: Number of images to process in each batch when running in parallel (default: 100).
 
 Examples:
 ```sh
-# Process a complete imageset and save results
+# Process a complete imageset and save results (sequential mode)
 python entrypoint.py detect-fpe-imageset 326
+
+# Process an imageset using 4 worker processes in parallel
+python entrypoint.py detect-fpe-imageset --workers 4 326
+
+# Process an imageset using 8 worker processes with smaller batch size
+python entrypoint.py detect-fpe-imageset --workers 8 --batch-size 50 326
 
 # Perform a dry run on only the first 10 images without saving results
 python entrypoint.py detect-fpe-imageset --max-images 10 --dry-run 326
@@ -101,6 +111,11 @@ python entrypoint.py detect-fpe-imageset --max-images 10 --dry-run 326
 # Specify a custom confidence threshold
 python entrypoint.py detect-fpe-imageset --min-confidence 0.5 326
 ```
+
+**Note on Parallel Processing:**
+- Parallel processing significantly speeds up detection for large imagesets
+- The `--workers` parameter should typically match the number of CPUs available
+- For memory-intensive operations, you may need to reduce batch size
 
 ## Testing
 
@@ -192,6 +207,32 @@ docker run --rm \
   -e FPE_S3_BUCKET \
   fpe-pii-detector detect-fpe-imageset 326
 ```
+
+### Parallel Processing in Docker
+
+When using parallel processing in Docker, it's recommended to limit the container's CPU usage to match the worker count:
+
+```sh
+# Process with 4 workers (recommended for most systems)
+docker run --rm \
+  --cpus=4 \
+  -v ~/.aws:/root/.aws \
+  --env-file .env \
+  fpe-pii-detector detect-fpe-imageset --workers 4 326
+
+# Process with 8 workers and smaller batch size (for powerful systems)
+docker run --rm \
+  --cpus=8 \
+  -v ~/.aws:/root/.aws \
+  --env-file .env \
+  fpe-pii-detector detect-fpe-imageset --workers 8 --batch-size 50 326
+```
+
+**Docker-Specific Considerations:**
+- Use `--cpus=N` to limit container CPU usage
+- Use `--memory=N` (e.g. `--memory=4g`) to limit container memory usage
+- For memory-constrained environments, reduce batch size with `--batch-size`
+- In AWS Batch, set resource requirements to match your worker count
 
 ### AWS ECR Deployment
 

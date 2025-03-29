@@ -4,6 +4,9 @@ import argparse
 import logging
 import json
 import os
+import multiprocessing
+import futureproof
+import concurrent.futures
 from .utils import load_detector, detect_image, setup_global_args, save_results_to_s3
 from .db import (
     get_db_credentials,
@@ -52,8 +55,136 @@ def setup_parser(parser):
         action="store_true",
         help="Dry run the script (results not saved to s3 or database)",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="Number of worker processes for parallel processing. Set to 0 or omit for sequential processing.",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=100,
+        help="Number of images to process in each batch (default: 100)",
+    )
     parser.add_argument("imageset_id", type=int, help="Imageset ID to process")
     return parser
+
+
+def process_image(detector, row, min_confidence, idx=None, total=None):
+    """
+    Process a single image for PII detection.
+
+    Args:
+        detector: The PII detector model
+        row: Database row with image information
+        min_confidence: Minimum confidence threshold
+        idx: Index of the image (for logging)
+        total: Total number of images (for logging)
+
+    Returns:
+        dict: Detection results for the image
+    """
+    image_id = row["id"]
+    bucket = row["full_s3"]["Bucket"]
+    key = row["full_s3"]["Key"]
+
+    s3_filename = f"s3://{bucket}/{key}"
+    result = detect_image(detector, s3_filename, min_confidence)
+
+    result["image_id"] = image_id
+    result["file"] = os.path.basename(s3_filename)
+
+    return result
+
+
+def process_images_in_sequence(detector, df_images, min_confidence):
+    results = []
+    n_images = len(df_images)
+    for idx, row in df_images.iterrows():
+        logger.info(
+            f"Processing image [{idx + 1}/{n_images}] (id={row['id']}, key={row['full_s3']['Key']})"
+        )
+        result = process_image(detector, row, min_confidence)
+        results.append(result)
+    return results
+
+
+def process_images_in_parallel(detector, df_images, min_confidence, workers, batch_size):
+    """
+    Process images in parallel using batch processing.
+
+    Args:
+        detector: The loaded PII detector model
+        df_images: DataFrame containing images to process
+        min_confidence: Minimum confidence threshold for detections
+        workers: Number of worker processes to use
+        batch_size: Number of images to process in each batch
+
+    Returns:
+        list: Results from processing all images
+    """
+    n_images = len(df_images)
+    results = []
+    total_completed = 0
+
+    # Process images in batches
+    for batch_start in range(0, n_images, batch_size):
+        batch_end = min(batch_start + batch_size, n_images)
+        batch_images = df_images.iloc[batch_start:batch_end]
+        batch_count = len(batch_images)
+
+        logger.info(
+            f"Processing batch {batch_start//batch_size + 1}/{(n_images + batch_size - 1)//batch_size} ({batch_count} images)"
+        )
+
+        # Create a pool with specified number of workers
+        with futureproof.ThreadPoolExecutor(
+            max_workers=workers,
+            monitor_interval=5,  # Check for completed tasks every 5 seconds
+        ) as executor:
+            futures = []
+
+            # Submit batch jobs to the executor
+            for idx, row in batch_images.iterrows():
+                global_idx = batch_start + (idx - batch_images.index[0])
+                logger.debug(
+                    f"Submitting image [{global_idx + 1}/{n_images}] (id={row['id']}, key={row['full_s3']['Key']})"
+                )
+                futures.append(
+                    executor.submit(
+                        process_image,
+                        detector,
+                        row,
+                        min_confidence,
+                        global_idx,
+                        n_images,
+                    )
+                )
+
+            # Process batch results as they complete
+            completed = 0
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    result = future.result()
+                    completed += 1
+                    total_completed += 1
+                    logger.debug(
+                        f"Completed image [{total_completed}/{n_images}] (id={result['image_id']}): {result}"
+                    )
+                    results.append(result)
+                except Exception as e:
+                    completed += 1
+                    total_completed += 1
+                    logger.error(
+                        f"Error processing image [{total_completed}/{n_images}]: {str(e)}"
+                    )
+
+        logger.info(
+            f"Completed batch {batch_start//batch_size + 1}/{(n_images + batch_size - 1)//batch_size} ({completed}/{batch_count} images)"
+        )
+
+    return results
 
 
 def run(args):
@@ -72,6 +203,7 @@ def run(args):
             - max_images (int, optional): Maximum number of images to process.
             - s3_bucket (str): S3 bucket to save results.
             - dry_run (bool): Whether to run without saving results.
+            - workers (int): Number of worker processes to use.
 
     Returns:
         int: 0 for success, 1 for failure.
@@ -118,23 +250,21 @@ def run(args):
         logger.info(f"Loading detector (model_file={args.model_file})")
         detector = load_detector(args.model_file)
 
-        results = []
         n_images = len(df_images)
-        logger.info(f"Processing {n_images} images")
-        for idx, row in df_images.iterrows():
-            image_id = row["id"]
-            bucket = row["full_s3"]["Bucket"]
-            key = row["full_s3"]["Key"]
 
-            logger.debug(f"Detecting image [{idx + 1}/{n_images}] (key={key})")
-            s3_filename = f"s3://{bucket}/{key}"
-            result = detect_image(detector, s3_filename, args.min_confidence)
-            logger.debug(f"Detection results [{idx + 1}/{n_images}]: {result}")
-
-            result["image_id"] = image_id
-            result["file"] = os.path.basename(s3_filename)
-
-            results.append(result)
+        # Choose between parallel or sequential processing
+        if args.workers is None or args.workers <= 0:
+            logger.info(f"Processing {n_images} images sequentially")
+            results = process_images_in_sequence(detector, df_images, args.min_confidence)
+        else:
+            workers = min(args.workers, n_images)
+            batch_size = min(args.batch_size, n_images)
+            logger.info(
+                f"Processing {n_images} images using {workers} worker processes in batches of {batch_size}"
+            )
+            results = process_images_in_parallel(
+                detector, df_images, args.min_confidence, workers, batch_size
+            )
 
         if not args.dry_run:
             key = f'imagesets/{imageset["uuid"]}/pii.json'
