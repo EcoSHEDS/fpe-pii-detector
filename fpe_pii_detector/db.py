@@ -76,7 +76,6 @@ def get_db_credentials_from_env():
         Exception: If environment variables cannot be accessed.
     """
     try:
-        logger.debug("Extracting database configuration from environment variables")
         config = {
             "host": os.getenv("FPE_DB_HOST"),
             "port": os.getenv("FPE_DB_PORT", 5432),
@@ -105,7 +104,7 @@ def get_db_credentials():
     """
     try:
         if os.getenv("FPE_DB_SECRET"):
-            config = get_db_credentials_from_secret("FPE_DB_SECRET")
+            config = get_db_credentials_from_secret(os.getenv("FPE_DB_SECRET"))
         else:
             config = get_db_credentials_from_env()
         if not config["host"] or not config["user"] or not config["dbname"]:
@@ -228,7 +227,6 @@ def update_imageset_pii_status(engine, imageset_id, status):
         with engine.connect() as conn:
             conn.execute(query, {"status": status, "imageset_id": imageset_id})
             conn.commit()
-        logger.debug(f"Updated imageset status to {status} (imageset_id={imageset_id})")
         return True
     except Exception as e:
         logger.error(
@@ -282,7 +280,8 @@ def save_results_to_database(engine, results):
                 SET pii_animal = pii_results.pii_animal,
                     pii_person = pii_results.pii_person,
                     pii_vehicle = pii_results.pii_vehicle,
-                    pii_detections = pii_results.pii_detections
+                    pii_detections = pii_results.pii_detections,
+                    updated_at = now()
                 FROM pii_results
                 WHERE images.id = pii_results.image_id;
             """

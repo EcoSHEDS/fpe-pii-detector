@@ -9,7 +9,8 @@ RUN apt-get update && \
 WORKDIR /app
 
 COPY ./requirements.txt /app/requirements.txt
-RUN pip install -r /app/requirements.txt
+RUN pip install -r /app/requirements.txt && \
+    rm -rf /root/.cache/pip
 
 # initialize ultralytics
 RUN python -c "from ultralytics import YOLO; YOLO()"

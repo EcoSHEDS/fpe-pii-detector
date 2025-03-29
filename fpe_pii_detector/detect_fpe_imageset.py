@@ -245,7 +245,9 @@ def run(args):
             raise Exception(
                 f"No images found for imageset (imageset_id={args.imageset_id})"
             )
-        logger.info(f"Imageset has {len(df_images)} images")
+        logger.info(
+            f"Retrieved {len(df_images)} images for imageset (imageset_id={args.imageset_id})"
+        )
 
         logger.info(f"Loading detector (model_file={args.model_file})")
         detector = load_detector(args.model_file)
@@ -270,6 +272,10 @@ def run(args):
             key = f'imagesets/{imageset["uuid"]}/pii.json'
             logger.info(f"Saving results to S3 (bucket={args.s3_bucket}, key={key})")
             save_results_to_s3(args.s3_bucket, key, results)
+
+            logger.info(
+                f"Saving results to database (imageset_id={args.imageset_id}, n_images={len(results)})"
+            )
             save_results_to_database(db_engine, results)
 
             logger.info(

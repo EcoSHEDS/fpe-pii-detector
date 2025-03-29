@@ -181,7 +181,7 @@ These files are useful for analyzing detector performance and verifying that cha
 # Build the Docker image
 docker build -t fpe-pii-detector .
 
-# For Apple Silicon (M1/M2) Macs, specify the platform
+# For Apple Silicon (M1+) Macs, specify the platform
 docker buildx build --platform=linux/amd64 -t fpe-pii-detector .
 ```
 
@@ -195,6 +195,7 @@ docker run --rm -v $(pwd)/data:/data fpe-pii-detector detect-image /data/image.j
 # Process an FPE imageset passing through AWS credentials from host user and loading environment variables from .env file
 docker run --rm \
   -v ~/.aws:/root/.aws \
+  -e AWS_PROFILE \
   --env-file .env \
   fpe-pii-detector detect-fpe-imageset 326
 
@@ -271,6 +272,14 @@ docker tag fpe-pii-detector:latest ${AWS_REPO}:latest
 docker push ${AWS_REPO}:latest
 ```
 
+### Running Tests in Docker
+
+The Docker image already includes the test files as shown in the Dockerfile. To run the tests in Docker:
+
+```sh
+docker run --rm --entrypoint python fpe-pii-detector /app/tests/run_tests.py
+```
+
 ## AWS Batch Execution
 
 When running in AWS Batch, the container will use the environment variables provided in the batch job definition. The entrypoint script will be executed with the command and arguments specified in the job parameters.
@@ -294,14 +303,6 @@ pip install black
 
 # Format all Python files
 black .
-```
-
-### Running Tests in Docker
-
-The Docker image already includes the test files as shown in the Dockerfile. To run the tests in Docker:
-
-```sh
-docker run --rm --entrypoint python fpe-pii-detector /app/tests/run_tests.py
 ```
 
 ## License
