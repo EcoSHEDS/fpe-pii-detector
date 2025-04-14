@@ -307,4 +307,4 @@ black .
 
 ## License
 
-This repository is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+The code in this repository is released to the public domain under the [CC0 1.0 Universal license](https://creativecommons.org/publicdomain/zero/1.0/). See [LICENSE](LICENSE) for details.
