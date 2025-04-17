@@ -255,7 +255,7 @@ def run(args):
         n_images = len(df_images)
 
         # Choose between parallel or sequential processing
-        if args.workers is None or args.workers <= 0:
+        if args.workers is None or args.workers <= 0 or n_images < 1000:
             logger.info(f"Processing {n_images} images sequentially")
             results = process_images_in_sequence(detector, df_images, args.min_confidence)
         else:
