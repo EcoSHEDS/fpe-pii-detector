@@ -41,7 +41,7 @@ def get_db_credentials_from_secret(secret_name="FPE_DB_SECRET"):
         logger.info(
             f"Fetching database credentials from secret (secret_name={secret_name})"
         )
-        client = boto3.client("secretsmanager")
+        client = boto3.client("secretsmanager", region_name=os.getenv("AWS_REGION", "us-east-1"))
         response = client.get_secret_value(SecretId=secret_name)
         value = json.loads(response["SecretString"])
         return {
