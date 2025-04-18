@@ -208,12 +208,12 @@ def fetch_imageset(engine, imageset_id):
 
 def update_imageset_pii_status(engine, imageset_id, status):
     """
-    Update the PII processing status of an imageset.
+    Update the processing and PII status of an imageset.
 
     Args:
         engine (sqlalchemy.engine.Engine): Database engine object.
         imageset_id (int): ID of the imageset to update.
-        status (str): New status value for the imageset.
+        status (str): New status value for the imageset status and pii_status.
             Typical values: 'PROCESSING', 'DONE', 'FAILED'
 
     Returns:
@@ -223,14 +223,14 @@ def update_imageset_pii_status(engine, imageset_id, status):
         Exception: If database update fails.
     """
     try:
-        query = text("UPDATE imagesets SET pii_status=:status WHERE id=:imageset_id")
+        query = text("UPDATE imagesets SET status=:status, pii_status=:status WHERE id=:imageset_id")
         with engine.connect() as conn:
             conn.execute(query, {"status": status, "imageset_id": imageset_id})
             conn.commit()
         return True
     except Exception as e:
         logger.error(
-            f"Failed to update status for imageset (imageset_id={imageset_id}): {str(e)}"
+            f"Failed to update status and pii_status for imageset (imageset_id={imageset_id}): {str(e)}"
         )
         raise
 
