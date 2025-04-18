@@ -258,10 +258,10 @@ aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS 
 
 ```sh
 # For Intel/AMD architectures
-docker build -t fpe-pii-detector .
+docker build -t fpe-pii-detector:latest .
 
 # For Apple Silicon (M1+) Macs
-docker buildx build --platform=linux/amd64 -t fpe-pii-detector .
+docker buildx build --platform=linux/amd64 -t fpe-pii-detector:latest .
 
 docker tag fpe-pii-detector:latest ${AWS_REPO}:latest
 ```
