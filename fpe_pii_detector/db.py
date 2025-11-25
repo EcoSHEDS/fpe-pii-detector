@@ -146,6 +146,7 @@ def db_connect(config):
 def fetch_imageset_images(engine, imageset_id, max_images=None):
     """
     Retrieve images associated with a specific imageset from the database.
+    Excludes images that failed to be processed (status != 'DONE').
 
     Args:
         engine (sqlalchemy.engine.Engine): Database engine object.
@@ -161,7 +162,7 @@ def fetch_imageset_images(engine, imageset_id, max_images=None):
         Exception: If database query fails.
     """
     try:
-        query = "SELECT * FROM images WHERE imageset_id=:imageset_id"
+        query = "SELECT * FROM images WHERE imageset_id=:imageset_id AND status='DONE'"
         if max_images:
             query += f" LIMIT :max_images"
         query = text(query)
