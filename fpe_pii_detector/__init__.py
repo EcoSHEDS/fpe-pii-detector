@@ -1,6 +1,6 @@
 """FPE PII Detector module for identifying persons and vehicles in images."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 from .utils import *
 from .logger import *
